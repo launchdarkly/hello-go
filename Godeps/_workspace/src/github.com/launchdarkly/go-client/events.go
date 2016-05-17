@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -33,7 +34,8 @@ type BaseEvent struct {
 
 type FeatureRequestEvent struct {
 	BaseEvent
-	Value interface{} `json:"value"`
+	Value   interface{} `json:"value"`
+	Default interface{} `json:"default"`
 }
 
 const (
@@ -96,7 +98,7 @@ func (ep *eventProcessor) flush() {
 		ep.config.Logger.Printf("Unexpected error marshalling event json: %+v", marshalErr)
 	}
 
-	req, reqErr := http.NewRequest("POST", ep.config.BaseUri+"/api/events/bulk", bytes.NewReader(payload))
+	req, reqErr := http.NewRequest("POST", ep.config.EventsUri+"/bulk", bytes.NewReader(payload))
 
 	if reqErr != nil {
 		ep.config.Logger.Printf("Unexpected error while creating event request: %+v", reqErr)
@@ -108,19 +110,29 @@ func (ep *eventProcessor) flush() {
 
 	resp, respErr := ep.client.Do(req)
 
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+		}
+	}()
+
 	if respErr != nil {
 		ep.config.Logger.Printf("Unexpected error while sending events: %+v", respErr)
 		return
 	}
 
-	if resp.Body != nil {
-		ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-	}
-
 }
 
 func (ep *eventProcessor) sendEvent(evt Event) error {
+	if !ep.config.SendEvents {
+		return nil
+	}
+
+	if ep.config.SamplingInterval > 0 && rand.Int31n(ep.config.SamplingInterval) != 0 {
+		return nil
+	}
+
 	ep.mu.Lock()
 	defer ep.mu.Unlock()
 
@@ -133,7 +145,7 @@ func (ep *eventProcessor) sendEvent(evt Event) error {
 
 // Used to just create the event. Normally, you don't need to call this;
 // the event is created and queued automatically by Toggle.
-func NewFeatureRequestEvent(key string, user User, value interface{}) FeatureRequestEvent {
+func NewFeatureRequestEvent(key string, user User, value, defaultVal interface{}) FeatureRequestEvent {
 	return FeatureRequestEvent{
 		BaseEvent: BaseEvent{
 			CreationDate: now(),
@@ -141,7 +153,8 @@ func NewFeatureRequestEvent(key string, user User, value interface{}) FeatureReq
 			User:         user,
 			Kind:         FEATURE_REQUEST_EVENT,
 		},
-		Value: value,
+		Value:   value,
+		Default: defaultVal,
 	}
 }
 

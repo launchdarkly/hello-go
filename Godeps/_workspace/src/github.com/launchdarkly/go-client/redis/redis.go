@@ -2,26 +2,33 @@ package redis
 
 import (
 	"encoding/json"
+	"fmt"
 	r "github.com/garyburd/redigo/redis"
 	ld "github.com/launchdarkly/go-client"
-	"strconv"
+	"github.com/patrickmn/go-cache"
 	"time"
 )
 
 // A Redis-backed feature store.
 type RedisFeatureStore struct {
-	prefix string
-	pool   *r.Pool
+	prefix  string
+	pool    *r.Pool
+	cache   *cache.Cache
+	timeout time.Duration
 }
+
+const initKey = "$initialized$"
 
 var pool *r.Pool
 
-func newPool(host string, port int) *r.Pool {
+func newPool(url string) *r.Pool {
 	pool = &r.Pool{
 		MaxIdle:     20,
+		MaxActive:   16,
+		Wait:        true,
 		IdleTimeout: 300 * time.Second,
 		Dial: func() (c r.Conn, err error) {
-			c, err = r.Dial("tcp", host+":"+strconv.Itoa(port))
+			c, err = r.DialURL(url)
 			return
 		},
 		TestOnBorrow: func(c r.Conn, t time.Time) error {
@@ -36,22 +43,45 @@ func (store *RedisFeatureStore) getConn() r.Conn {
 	return store.pool.Get()
 }
 
-// Constructs a new Redis-backed feature store connecting to the specified host and port.
+// Constructs a new Redis-backed feature store connecting to the specified URL with a default
+// connection pool configuration (16 concurrent connections, connection requests block).
 // Attaches a prefix string to all keys to namespace LaunchDarkly-specific keys. If the
-// specified prefix is the empty string, it defaults to "launchdarkly"
-func NewRedisFeatureStore(host string, port int, prefix string) *RedisFeatureStore {
-	pool := newPool(host, port)
+// specified prefix is the empty string, it defaults to "launchdarkly".
+func NewRedisFeatureStoreFromUrl(url, prefix string, timeout time.Duration) *RedisFeatureStore {
+	return NewRedisFeatureStoreWithPool(newPool(url), prefix, timeout)
+
+}
+
+// Constructs a new Redis-backed feature store with the specified redigo pool configuration.
+// Attaches a prefix string to all keys to namespace LaunchDarkly-specific keys. If the
+// specified prefix is the empty string, it defaults to "launchdarkly".
+func NewRedisFeatureStoreWithPool(pool *r.Pool, prefix string, timeout time.Duration) *RedisFeatureStore {
+	var c *cache.Cache
 
 	if prefix == "" {
 		prefix = "launchdarkly"
 	}
 
+	if timeout > 0 {
+		c = cache.New(timeout, 5*time.Minute)
+	}
+
 	store := RedisFeatureStore{
-		prefix: prefix,
-		pool:   pool,
+		prefix:  prefix,
+		pool:    pool,
+		cache:   c,
+		timeout: timeout,
 	}
 
 	return &store
+}
+
+// Constructs a new Redis-backed feature store connecting to the specified host and port with a default
+// connection pool configuration (16 concurrent connections, connection requests block).
+// Attaches a prefix string to all keys to namespace LaunchDarkly-specific keys. If the
+// specified prefix is the empty string, it defaults to "launchdarkly"
+func NewRedisFeatureStore(host string, port int, prefix string, timeout time.Duration) *RedisFeatureStore {
+	return NewRedisFeatureStoreFromUrl(fmt.Sprintf("redis://%s:%d", host, port), prefix, timeout)
 }
 
 func (store *RedisFeatureStore) featuresKey() string {
@@ -60,6 +90,17 @@ func (store *RedisFeatureStore) featuresKey() string {
 
 func (store *RedisFeatureStore) Get(key string) (*ld.Feature, error) {
 	var feature ld.Feature
+
+	if store.cache != nil {
+		if data, present := store.cache.Get(key); present {
+			if feature, ok := data.(ld.Feature); ok {
+				if feature.Deleted {
+					return nil, nil
+				}
+				return &feature, nil
+			}
+		}
+	}
 
 	c := store.getConn()
 	defer c.Close()
@@ -79,6 +120,10 @@ func (store *RedisFeatureStore) Get(key string) (*ld.Feature, error) {
 
 	if feature.Deleted {
 		return nil, nil
+	}
+
+	if store.cache != nil {
+		store.cache.Set(key, feature, store.timeout)
 	}
 
 	return &feature, nil
@@ -119,6 +164,10 @@ func (store *RedisFeatureStore) Init(features map[string]*ld.Feature) error {
 	c.Send("MULTI")
 	c.Send("DEL", store.featuresKey())
 
+	if store.cache != nil {
+		store.cache.Flush()
+	}
+
 	for k, v := range features {
 		data, jsonErr := json.Marshal(v)
 
@@ -127,6 +176,11 @@ func (store *RedisFeatureStore) Init(features map[string]*ld.Feature) error {
 		}
 
 		c.Send("HSET", store.featuresKey(), k, data)
+
+		if store.cache != nil {
+			store.cache.Set(k, v, store.timeout)
+		}
+
 	}
 	_, err := c.Do("EXEC")
 	return err
@@ -158,7 +212,11 @@ func (store *RedisFeatureStore) Delete(key string, version int) error {
 		return jsonErr
 	}
 
-	_, err := c.Do("HSET", store.featuresKey(), data)
+	_, err := c.Do("HSET", store.featuresKey(), key, data)
+
+	if err == nil && store.cache != nil {
+		store.cache.Set(key, feature, store.timeout)
+	}
 
 	return err
 }
@@ -176,7 +234,7 @@ func (store *RedisFeatureStore) Upsert(key string, f ld.Feature) error {
 		return featureErr
 	}
 
-	if o.Version >= f.Version {
+	if o != nil && o.Version >= f.Version {
 		return nil
 	}
 
@@ -188,14 +246,28 @@ func (store *RedisFeatureStore) Upsert(key string, f ld.Feature) error {
 
 	_, err := c.Do("HSET", store.featuresKey(), key, data)
 
+	if err == nil && store.cache != nil {
+		store.cache.Set(key, f, store.timeout)
+	}
+
 	return err
 }
 
 func (store *RedisFeatureStore) Initialized() bool {
+	if store.cache != nil {
+		if _, present := store.cache.Get(initKey); present {
+			return true
+		}
+	}
+
 	c := store.getConn()
 	defer c.Close()
 
 	init, err := r.Bool(c.Do("EXISTS", store.featuresKey()))
+
+	if store.cache != nil && err == nil && init {
+		store.cache.Set(initKey, true, store.timeout)
+	}
 
 	return err == nil && init
 }

@@ -1,15 +1,9 @@
 package ldclient
 
 import (
-	"encoding/json"
 	"errors"
-	"github.com/facebookgo/httpcontrol"
-	"github.com/gregjones/httpcache"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -22,23 +16,33 @@ const Version string = "0.0.3"
 type LDClient struct {
 	apiKey          string
 	config          Config
-	httpClient      *http.Client
 	eventProcessor  *eventProcessor
-	offline         bool
-	streamProcessor *streamProcessor
+	updateProcessor updateProcessor
+	store           FeatureStore
 }
 
 // Exposes advanced configuration options for the LaunchDarkly client.
 type Config struct {
-	BaseUri       string
-	StreamUri     string
-	Capacity      int
-	FlushInterval time.Duration
-	Logger        *log.Logger
-	Timeout       time.Duration
-	Stream        bool
-	FeatureStore  FeatureStore
-	UseLdd        bool
+	BaseUri          string
+	StreamUri        string
+	EventsUri        string
+	Capacity         int
+	FlushInterval    time.Duration
+	SamplingInterval int32
+	PollInterval     time.Duration
+	Logger           *log.Logger
+	Timeout          time.Duration
+	Stream           bool
+	FeatureStore     FeatureStore
+	UseLdd           bool
+	SendEvents       bool
+	Offline          bool
+}
+
+type updateProcessor interface {
+	initialized() bool
+	close()
+	start(chan<- bool)
 }
 
 // Provides the default configuration options for the LaunchDarkly client.
@@ -49,59 +53,95 @@ type Config struct {
 var DefaultConfig = Config{
 	BaseUri:       "https://app.launchdarkly.com",
 	StreamUri:     "https://stream.launchdarkly.com",
+	EventsUri:     "https://events.launchdarkly.com",
 	Capacity:      1000,
 	FlushInterval: 5 * time.Second,
+	PollInterval:  1 * time.Second,
 	Logger:        log.New(os.Stderr, "[LaunchDarkly]", log.LstdFlags),
 	Timeout:       3000 * time.Millisecond,
 	Stream:        true,
 	FeatureStore:  nil,
 	UseLdd:        false,
+	SendEvents:    true,
+	Offline:       false,
 }
+
+var (
+	ErrNonBooleanValue       = errors.New("Feature flag returned non-boolean value")
+	ErrNonNumericValue       = errors.New("Feature flag returned non-numeric value")
+	ErrInitializationTimeout = errors.New("Timeout encountered waiting for LaunchDarkly client initialization")
+	ErrClientNotInitialized  = errors.New("Toggle called before LaunchDarkly client initialization completed")
+	ErrUnknownFeatureKey     = errors.New("Unknown feature key. Verify that this feature key exists. Returning default value.")
+)
 
 // Creates a new client instance that connects to LaunchDarkly with the default configuration. In most
-// cases, you should use this method to instantiate your client.
-func MakeClient(apiKey string) *LDClient {
-	res := MakeCustomClient(apiKey, DefaultConfig)
-	return &res
+// cases, you should use this method to instantiate your client. The optional duration parameter allows callers to
+// block until the client has connected to LaunchDarkly and is properly initialized.
+func MakeClient(apiKey string, waitFor time.Duration) (*LDClient, error) {
+	return MakeCustomClient(apiKey, DefaultConfig, waitFor)
 }
 
-// Creates a new client instance that connects to LaunchDarkly with a custom configuration.
-func MakeCustomClient(apiKey string, config Config) LDClient {
-	var streamProcessor *streamProcessor
+// Creates a new client instance that connects to LaunchDarkly with a custom configuration. The optional duration parameter allows callers to
+// block until the client has connected to LaunchDarkly and is properly initialized.
+func MakeCustomClient(apiKey string, config Config, waitFor time.Duration) (*LDClient, error) {
+	var updateProcessor updateProcessor
+	var store FeatureStore
+
+	ch := make(chan bool)
 
 	config.BaseUri = strings.TrimRight(config.BaseUri, "/")
+	config.EventsUri = strings.TrimRight(config.EventsUri, "/")
 
-	baseTransport := httpcontrol.Transport{
-		RequestTimeout: config.Timeout,
-		DialTimeout:    config.Timeout,
-		DialKeepAlive:  1 * time.Minute,
-		MaxTries:       3,
+	requestor := newRequestor(apiKey, config)
+
+	if config.FeatureStore == nil {
+		config.FeatureStore = NewInMemoryFeatureStore()
 	}
 
-	cachingTransport := &httpcache.Transport{
-		Cache:               httpcache.NewMemoryCache(),
-		MarkCachedResponses: true,
-		Transport:           &baseTransport,
+	if config.PollInterval < (1 * time.Second) {
+		config.PollInterval = 1 * time.Second
 	}
 
-	httpClient := cachingTransport.Client()
+	store = config.FeatureStore
 
-	if config.Stream {
-		streamProcessor = newStream(apiKey, config)
+	if !config.UseLdd && !config.Offline {
+		if config.Stream {
+			updateProcessor = newStreamProcessor(apiKey, config, requestor)
+		} else {
+			updateProcessor = newPollingProcessor(config, requestor)
+		}
+		updateProcessor.start(ch)
 	}
 
-	return LDClient{
+	client := LDClient{
 		apiKey:          apiKey,
 		config:          config,
-		httpClient:      httpClient,
 		eventProcessor:  newEventProcessor(apiKey, config),
-		offline:         false,
-		streamProcessor: streamProcessor,
+		updateProcessor: updateProcessor,
+		store:           store,
+	}
+
+	if config.UseLdd || config.Offline {
+		return &client, nil
+	}
+
+	timeout := time.After(waitFor)
+
+	for {
+		select {
+		case <-ch:
+			return &client, nil
+		case <-timeout:
+			if waitFor > 0 {
+				return &client, ErrInitializationTimeout
+			}
+			return &client, nil
+		}
 	}
 }
 
 func (client *LDClient) Identify(user User) error {
-	if client.offline {
+	if client.IsOffline() {
 		return nil
 	}
 	evt := NewIdentifyEvent(user)
@@ -111,90 +151,123 @@ func (client *LDClient) Identify(user User) error {
 // Tracks that a user has performed an event. Custom data can be attached to the
 // event, and is serialized to JSON using the encoding/json package (http://golang.org/pkg/encoding/json/).
 func (client *LDClient) Track(key string, user User, data interface{}) error {
-	if client.offline {
+	if client.IsOffline() {
 		return nil
 	}
 	evt := NewCustomEvent(key, user, data)
 	return client.eventProcessor.sendEvent(evt)
 }
 
-// Puts the LaunchDarkly client in offline mode. In offline mode, no network calls will be made,
-// and no events will be recorded. In addition, all calls to Toggle will return the default value.
-func (client *LDClient) SetOffline() {
-	client.offline = true
-}
-
-// Puts the LaunchDarkly client in online mode.
-func (client *LDClient) SetOnline() {
-	client.offline = false
-}
-
 // Returns whether the LaunchDarkly client is in offline mode.
 func (client *LDClient) IsOffline() bool {
-	return client.offline
+	return client.config.Offline
 }
 
-// Eagerly initializes the stream connection. If InitializeStream is not called, the stream will
-// be initialized lazily with the first call to Toggle.
-func (client *LDClient) InitializeStream() {
-	if client.config.Stream {
-		client.streamProcessor.StartOnce()
-	}
+// Returns whether the LaunchDarkly client is initialized.
+func (client *LDClient) Initialized() bool {
+	return client.IsOffline() || client.config.UseLdd || client.updateProcessor.initialized()
 }
 
-// Returns false if the LaunchDarkly client does not have an active connection to
-// the LaunchDarkly streaming endpoint. If streaming mode is disabled in the client
-// configuration, this will always return false.
-func (client *LDClient) IsStreamDisconnected() bool {
-	return client.config.Stream == false || client.streamProcessor == nil || client.streamProcessor.ShouldFallbackUpdate()
-}
-
-// Returns whether the LaunchDarkly client has received an initial response from
-// the LaunchDarkly streaming endpoint. If this is the case, the client can service
-// Toggle calls from the stream. If streaming mode is disabled in the client
-// configuration, this will always return false.
-func (client *LDClient) IsStreamInitialized() bool {
-	return client.config.Stream && client.streamProcessor != nil && client.streamProcessor.Initialized()
-}
-
-// Stops the LaunchDarkly client from sending any additional events.
+// Shuts down the LaunchDarkly client. After calling this, the LaunchDarkly client
+// should no longer be used.
 func (client *LDClient) Close() {
+	if client.IsOffline() {
+		return
+	}
 	client.eventProcessor.close()
+	if !client.config.UseLdd {
+		client.updateProcessor.close()
+	}
 }
 
 // Immediately flushes queued events.
 func (client *LDClient) Flush() {
+	if client.IsOffline() {
+		return
+	}
 	client.eventProcessor.flush()
 }
 
+// Returns a map from feature flag keys to boolean feature flag values for a given user. The
+// map will contain nil for any flags that are off. If the client is offline or has not been initialized,
+// a nil map will be returned. This method will not send analytics events back to LaunchDarkly.
+// The most common use case for this is bootstrapping client-side feature flags from a back-end service.
+func (client *LDClient) AllFlags(user User) (map[string]*bool, error) {
+	if client.IsOffline() {
+		return nil, nil
+	}
+
+	if !client.Initialized() {
+		return nil, ErrClientNotInitialized
+	}
+
+	allFlags, err := client.store.All()
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make(map[string]*bool)
+
+	for key, _ := range allFlags {
+		value, err := client.evaluate(key, user, nil)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if value != nil {
+			bval, ok := value.(bool)
+
+			if !ok {
+				return nil, ErrNonBooleanValue
+			}
+			results[key] = &bval
+		} else {
+			results[key] = nil
+		}
+	}
+
+	return results, nil
+}
+
 // Returns the value of a boolean feature flag for a given user. Returns defaultVal if
-// there is an error, if the flag doesn't exist, or the feature is turned off.
+// there is an error, if the flag doesn't exist, the client hasn't completed initialization,
+// or the feature is turned off.
 func (client *LDClient) Toggle(key string, user User, defaultVal bool) (bool, error) {
+	if client.IsOffline() {
+		return defaultVal, nil
+	}
+
 	value, err := client.evaluate(key, user, defaultVal)
 
 	if err != nil {
-		client.sendFlagRequestEvent(key, user, defaultVal)
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
 		return defaultVal, err
 	}
 
 	result, ok := value.(bool)
 
 	if !ok {
-		client.sendFlagRequestEvent(key, user, defaultVal)
-		return defaultVal, errors.New("Feature flag returned non-bool value")
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
+		return defaultVal, ErrNonBooleanValue
 	}
 
-	client.sendFlagRequestEvent(key, user, value)
+	client.sendFlagRequestEvent(key, user, value, defaultVal)
 	return result, nil
 }
 
 // Returns the value of a feature flag (whose variations are integers) for the given user.
 // Returns defaultVal if there is an error, if the flag doesn't exist, or the feature is turned off.
 func (client *LDClient) IntVariation(key string, user User, defaultVal int) (int, error) {
+	if client.IsOffline() {
+		return defaultVal, nil
+	}
+
 	value, err := client.evaluate(key, user, float64(defaultVal))
 
 	if err != nil {
-		client.sendFlagRequestEvent(key, user, defaultVal)
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
 		return defaultVal, err
 	}
 
@@ -202,135 +275,67 @@ func (client *LDClient) IntVariation(key string, user User, defaultVal int) (int
 	result, ok := value.(float64)
 
 	if !ok {
-		client.sendFlagRequestEvent(key, user, defaultVal)
-		return defaultVal, errors.New("Feature flag returned non-numeric value")
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
+		return defaultVal, ErrNonNumericValue
 	}
 
-	client.sendFlagRequestEvent(key, user, value)
+	client.sendFlagRequestEvent(key, user, value, defaultVal)
 	return int(result), nil
 }
 
 // Returns the value of a feature flag (whose variations are floats) for the given user.
 // Returns defaultVal if there is an error, if the flag doesn't exist, or the feature is turned off.
 func (client *LDClient) Float64Variation(key string, user User, defaultVal float64) (float64, error) {
+	if client.IsOffline() {
+		return defaultVal, nil
+	}
+
 	value, err := client.evaluate(key, user, defaultVal)
 
 	if err != nil {
-		client.sendFlagRequestEvent(key, user, defaultVal)
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
 		return defaultVal, err
 	}
 
 	result, ok := value.(float64)
 
 	if !ok {
-		client.sendFlagRequestEvent(key, user, defaultVal)
-		return defaultVal, errors.New("Feature flag returned non-numeric value")
+		client.sendFlagRequestEvent(key, user, defaultVal, defaultVal)
+		return defaultVal, ErrNonNumericValue
 	}
 
-	client.sendFlagRequestEvent(key, user, value)
+	client.sendFlagRequestEvent(key, user, value, defaultVal)
 	return result, nil
 }
 
-func (client *LDClient) sendFlagRequestEvent(key string, user User, value interface{}) error {
-	if client.offline {
+func (client *LDClient) sendFlagRequestEvent(key string, user User, value, defaultVal interface{}) error {
+	if client.IsOffline() {
 		return nil
 	}
-	evt := NewFeatureRequestEvent(key, user, value)
+	evt := NewFeatureRequestEvent(key, user, value, defaultVal)
 	return client.eventProcessor.sendEvent(evt)
-}
-
-func (client *LDClient) makeRequest(key string) (*Feature, error) {
-	var feature Feature
-
-	req, reqErr := http.NewRequest("GET", client.config.BaseUri+"/api/eval/features/"+key, nil)
-
-	if reqErr != nil {
-		return nil, reqErr
-	}
-
-	req.Header.Add("Authorization", "api_key "+client.apiKey)
-	req.Header.Add("User-Agent", "GoClient/"+Version)
-
-	res, resErr := client.httpClient.Do(req)
-
-	defer func() {
-		if res != nil && res.Body != nil {
-			ioutil.ReadAll(res.Body)
-			res.Body.Close()
-		}
-	}()
-
-	if resErr != nil {
-		return nil, resErr
-	}
-
-	if res.StatusCode == http.StatusUnauthorized {
-		return nil, errors.New("Invalid API key. Verify that your API key is correct. Returning default value.")
-	}
-
-	if res.StatusCode == http.StatusNotFound {
-		return nil, errors.New("Unknown feature key. Verify that this feature key exists. Returning default value.")
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, errors.New("Unexpected response code: " + strconv.Itoa(res.StatusCode))
-	}
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		return nil, err
-	}
-
-	jsonErr := json.Unmarshal(body, &feature)
-
-	if jsonErr != nil {
-		return nil, jsonErr
-	} else {
-		return &feature, nil
-	}
-
 }
 
 func (client *LDClient) evaluate(key string, user User, defaultVal interface{}) (interface{}, error) {
 	var feature Feature
-	var streamErr error
+	var storeErr error
+	var featurePtr *Feature
 
-	if client.IsOffline() {
-		return defaultVal, nil
+	if !client.Initialized() {
+		return defaultVal, ErrClientNotInitialized
 	}
 
-	if client.IsStreamInitialized() {
-		var featurePtr *Feature
-		featurePtr, streamErr = client.streamProcessor.GetFeature(key)
+	featurePtr, storeErr = client.store.Get(key)
 
-		if !client.config.UseLdd && client.IsStreamDisconnected() {
-			go func() {
-				if feature, err := client.makeRequest(key); err != nil {
-					client.config.Logger.Printf("Failed to update feature in fallback mode. Flag values may be stale.")
-				} else {
-					client.streamProcessor.store.Upsert(*feature.Key, *feature)
-				}
-			}()
-		}
+	if storeErr != nil {
+		client.config.Logger.Printf("Encountered error fetching feature from store: %+v", storeErr)
+		return defaultVal, storeErr
+	}
 
-		if streamErr != nil {
-			client.config.Logger.Printf("Encountered error in stream: %+v", streamErr)
-			return defaultVal, streamErr
-		}
-
-		if featurePtr != nil {
-			feature = *featurePtr
-		} else {
-			return defaultVal, errors.New("Unknown feature key. Verify that this feature key exists. Returning default value.")
-		}
+	if featurePtr != nil {
+		feature = *featurePtr
 	} else {
-		client.InitializeStream()
-		if featurePtr, reqErr := client.makeRequest(key); reqErr != nil {
-			return defaultVal, reqErr
-		} else {
-			feature = *featurePtr
-		}
+		return defaultVal, ErrUnknownFeatureKey
 	}
 
 	value, pass := feature.Evaluate(user)
