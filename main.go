@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	ld "github.com/launchdarkly/go-client"
+	ld "gopkg.in/launchdarkly/go-client.v2"
 	"time"
 )
 
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// TODO : Enter the key for your feature flag here
-	show_feature, err := client.Toggle("YOUR_FEATURE_FLAG_KEY", user, false)
+	show_feature, err := client.BoolVariation("YOUR_FEATURE_FLAG_KEY", user, false)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
