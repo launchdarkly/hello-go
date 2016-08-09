@@ -7,8 +7,8 @@ import (
 )
 
 func main() {
-	// TODO : Enter your LaunchDarkly API key here
-	client, err := ld.MakeClient("YOUR_API_KEY", 5*time.Second)
+	// TODO : Enter your LaunchDarkly SDK key here
+	client, err := ld.MakeClient("YOUR_SDK_KEY", 5*time.Second)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
