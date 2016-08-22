@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	ld "github.com/launchdarkly/go-client"
+	ld "gopkg.in/launchdarkly/go-client.v2"
 	"time"
 )
 
 func main() {
-	// TODO : Enter your LaunchDarkly API key here
-	client, err := ld.MakeClient("YOUR_API_KEY", 5*time.Second)
+	// TODO : Enter your LaunchDarkly SDK key here
+	client, err := ld.MakeClient("YOUR_SDK_KEY", 5*time.Second)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// TODO : Enter the key for your feature flag here
-	show_feature, err := client.Toggle("YOUR_FEATURE_FLAG_KEY", user, false)
+	show_feature, err := client.BoolVariation("YOUR_FEATURE_FLAG_KEY", user, false)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
