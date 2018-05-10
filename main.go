@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	ld "gopkg.in/launchdarkly/go-client.v2"
+	ld "gopkg.in/launchdarkly/go-client.v4"
 	"time"
 )
 
