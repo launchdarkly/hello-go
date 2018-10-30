@@ -54,10 +54,10 @@
 			"revisionTime": "2017-08-29T18:53:51Z"
 		},
 		{
-			"checksumSHA1": "GWm5nivfRXzgEYFambZOh/680yE=",
+			"checksumSHA1": "uUIibPm6JyTguJFZAmNcrfBLG2Y=",
 			"path": "gopkg.in/launchdarkly/go-client.v4",
-			"revision": "c292e113f1f54c7c6c57e8ac103f228676c0d94e",
-			"revisionTime": "2018-08-27T20:22:13Z"
+			"revision": "1905dcf989fe220a1eb2ba30d2e51ba9e0958044",
+			"revisionTime": "2018-10-30T21:56:24Z"
 		}
 	],
 	"rootPath": "github.com/launchdarkly/hello-go"
