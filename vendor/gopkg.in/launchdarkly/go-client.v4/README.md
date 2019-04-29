@@ -1,7 +1,7 @@
 LaunchDarkly SDK for Go
 ===========================
 
-[![Circle CI](https://circleci.com/gh/launchdarkly/go-client.svg?style=svg)](https://circleci.com/gh/launchdarkly/go-client)
+[![Circle CI](https://circleci.com/gh/launchdarkly/go-server-sdk.svg?style=svg)](https://circleci.com/gh/launchdarkly/go-server-sdk)
 
 Go runtime compatibility
 -------------------------
@@ -14,13 +14,13 @@ Quick setup
 1. Install the SDK with the `go` tool:
 
 ```bash
-go get gopkg.in/launchdarkly/go-client.v4
+go get gopkg.in/launchdarkly/go-server-sdk.v4
 ```
 
 2. Import the LaunchDarkly client:
 
 ```go
-import ld "gopkg.in/launchdarkly/go-client.v4"
+import ld "gopkg.in/launchdarkly/go-server-sdk.v4"
 ```
 
 3. Create a new LDClient with your SDK key:
