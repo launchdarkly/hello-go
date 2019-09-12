@@ -10,6 +10,7 @@ import (
 	"time"
 
 	es "github.com/launchdarkly/eventsource"
+	"gopkg.in/launchdarkly/go-server-sdk.v4/ldlog"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 	patchEvent         = "patch"
 	deleteEvent        = "delete"
 	indirectPatchEvent = "indirect/patch"
+	streamReadTimeout  = 5 * time.Minute // the LaunchDarkly stream should send a heartbeat comment every 3 minutes
 )
 
 type streamProcessor struct {
@@ -58,7 +60,7 @@ func (sp *streamProcessor) Initialized() bool {
 }
 
 func (sp *streamProcessor) Start(closeWhenReady chan<- struct{}) {
-	sp.config.Logger.Printf("Starting LaunchDarkly streaming connection")
+	sp.config.Loggers.Info("Starting LaunchDarkly streaming connection")
 	go sp.subscribe(closeWhenReady)
 }
 
@@ -103,86 +105,86 @@ func (sp *streamProcessor) events(closeWhenReady chan<- struct{}) {
 		select {
 		case event, ok := <-sp.stream.Events:
 			if !ok {
-				sp.config.Logger.Printf("Event stream closed.")
+				sp.config.Loggers.Info("Event stream closed")
 				return
 			}
 			switch event.Event() {
 			case putEvent:
 				var put putData
 				if err := json.Unmarshal([]byte(event.Data()), &put); err != nil {
-					sp.config.Logger.Printf("ERROR: Unexpected error unmarshalling PUT json: %+v", err)
+					sp.config.Loggers.Errorf("Unexpected error unmarshalling PUT json: %+v", err)
 					break
 				}
 				err := sp.store.Init(MakeAllVersionedDataMap(put.Data.Flags, put.Data.Segments))
 				if err != nil {
-					sp.config.Logger.Printf("Error initializing store: %s", err)
+					sp.config.Loggers.Errorf("Error initializing store: %s", err)
 					return
 				}
 				sp.setInitializedOnce.Do(func() {
-					sp.config.Logger.Printf("Started LaunchDarkly streaming client")
+					sp.config.Loggers.Info("LaunchDarkly streaming is active")
 					sp.isInitialized = true
 					notifyReady()
 				})
 			case patchEvent:
 				var patch patchData
 				if err := json.Unmarshal([]byte(event.Data()), &patch); err != nil {
-					sp.config.Logger.Printf("ERROR: Unexpected error unmarshalling PATCH json: %+v", err)
+					sp.config.Loggers.Errorf("Unexpected error unmarshalling PATCH json: %+v", err)
 					break
 				}
 				path, err := parsePath(patch.Path)
 				if err != nil {
-					sp.config.Logger.Printf("ERROR: Unable to process event %s: %s", event.Event(), err)
+					sp.config.Loggers.Errorf("Unable to process event %s: %s", event.Event(), err)
 					break
 				}
 				item := path.kind.GetDefaultItem().(VersionedData)
 				if err = json.Unmarshal(patch.Data, item); err != nil {
-					sp.config.Logger.Printf("ERROR: Unexpected error unmarshalling json for %s item: %+v", path.kind, err)
+					sp.config.Loggers.Errorf("Unexpected error unmarshalling JSON for %s item: %+v", path.kind, err)
 					break
 				}
 				if err = sp.store.Upsert(path.kind, item); err != nil {
-					sp.config.Logger.Printf("ERROR: Unexpected error storing segment json: %+v", err)
+					sp.config.Loggers.Errorf("Unexpected error storing %s item: %+v", path.kind, err)
 				}
 			case deleteEvent:
 				var data deleteData
 				if err := json.Unmarshal([]byte(event.Data()), &data); err != nil {
-					sp.config.Logger.Printf("ERROR: Unexpected error unmarshalling DELETE json: %+v", err)
+					sp.config.Loggers.Errorf("Unexpected error unmarshalling DELETE json: %+v", err)
 					break
 				}
 				path, err := parsePath(data.Path)
 				if err != nil {
-					sp.config.Logger.Printf("ERROR: Unable to process event %s: %s", event.Event(), err)
+					sp.config.Loggers.Errorf("Unable to process event %s: %s", event.Event(), err)
 					break
 				}
 				if err = sp.store.Delete(path.kind, path.key, data.Version); err != nil {
-					sp.config.Logger.Printf(`ERROR: Unexpected error deleting %s object "%s": %s`, path.kind, path.key, err)
+					sp.config.Loggers.Errorf(`Unexpected error deleting %s item "%s": %s`, path.kind, path.key, err)
 				}
 			case indirectPatchEvent:
 				path, err := parsePath(event.Data())
 				if err != nil {
-					sp.config.Logger.Printf("ERROR: Unable to process event %s: %s", event.Event(), err)
+					sp.config.Loggers.Errorf("Unable to process event %s: %s", event.Event(), err)
 					break
 				}
 				item, requestErr := sp.requestor.requestResource(path.kind, path.key)
 				if requestErr != nil {
-					sp.config.Logger.Printf(`ERROR: Unexpected error requesting %s item "%s": %+v`, path.kind, path.key, err)
+					sp.config.Loggers.Errorf(`Unexpected error requesting %s item "%s": %+v`, path.kind, path.key, err)
 					break
 				}
 				if err = sp.store.Upsert(path.kind, item); err != nil {
-					sp.config.Logger.Printf(`ERROR: Unexpected error store %s item "%s": %+v`, path.kind, path.key, err)
+					sp.config.Loggers.Errorf(`Unexpected error store %s item "%s": %+v`, path.kind, path.key, err)
 				}
 			default:
-				sp.config.Logger.Printf("Unexpected event found in stream: %s", event.Event())
+				sp.config.Loggers.Infof("Unexpected event found in stream: %s", event.Event())
 			}
 		case err, ok := <-sp.stream.Errors:
 			if !ok {
-				sp.config.Logger.Printf("Event error stream closed.")
+				sp.config.Loggers.Info("Event error stream closed")
 				return // Otherwise we will spin in this loop
 			}
 			if err != io.EOF {
-				sp.config.Logger.Printf("ERROR: Error encountered processing stream: %+v", err)
+				sp.config.Loggers.Errorf("Error encountered processing stream: %+v", err)
 				if sp.checkIfPermanentFailure(err) {
 					sp.closeOnce.Do(func() {
-						sp.config.Logger.Printf("Closing event stream.")
+						sp.config.Loggers.Info("Closing event stream")
 						sp.stream.Close()
 					})
 					return
@@ -203,11 +205,13 @@ func newStreamProcessor(sdkKey string, config Config, requestor *requestor) *str
 		requestor: requestor,
 		halt:      make(chan struct{}),
 	}
-	if requestor != nil {
-		sp.client = requestor.httpClient
-	} else {
-		sp.client = config.newHTTPClient()
-	}
+
+	sp.client = config.newHTTPClient()
+	// Client.Timeout isn't just a connect timeout, it will break the connection if a full response
+	// isn't received within that time (which, with the stream, it never will be), so we must make
+	// sure it's zero and not the usual configured default. What we do want is a *connection* timeout,
+	// which is set by newHTTPClient as a property of the Dialer.
+	sp.client.Timeout = 0
 
 	return sp
 }
@@ -217,11 +221,15 @@ func (sp *streamProcessor) subscribe(closeWhenReady chan<- struct{}) {
 		req, _ := http.NewRequest("GET", sp.config.StreamUri+"/all", nil)
 		req.Header.Add("Authorization", sp.sdkKey)
 		req.Header.Add("User-Agent", sp.config.UserAgent)
-		sp.config.Logger.Printf("Connecting to LaunchDarkly stream using URL: %s", req.URL.String())
+		sp.config.Loggers.Info("Connecting to LaunchDarkly stream")
 
 		if stream, err := es.SubscribeWithRequestAndOptions(req,
 			es.StreamOptionHTTPClient(sp.client),
-			es.StreamOptionLogger(sp.config.Logger)); err != nil {
+			es.StreamOptionReadTimeout(streamReadTimeout),
+			es.StreamOptionLogger(sp.config.Loggers.ForLevel(ldlog.Info))); err != nil {
+
+			sp.config.Loggers.Warnf("Unable to establish streaming connection: %+v", err)
+
 			if sp.checkIfPermanentFailure(err) {
 				close(closeWhenReady)
 				return
@@ -246,7 +254,7 @@ func (sp *streamProcessor) subscribe(closeWhenReady chan<- struct{}) {
 
 func (sp *streamProcessor) checkIfPermanentFailure(err error) bool {
 	if se, ok := err.(es.SubscriptionError); ok {
-		sp.config.Logger.Printf("ERROR: %s", httpErrorMessage(se.Code, "streaming connection", "will retry"))
+		sp.config.Loggers.Error(httpErrorMessage(se.Code, "streaming connection", "will retry"))
 		if !isHTTPErrorRecoverable(se.Code) {
 			return true
 		}
@@ -257,7 +265,7 @@ func (sp *streamProcessor) checkIfPermanentFailure(err error) bool {
 // Close instructs the processor to stop receiving updates
 func (sp *streamProcessor) Close() error {
 	sp.closeOnce.Do(func() {
-		sp.config.Logger.Printf("Closing event stream.")
+		sp.config.Loggers.Info("Closing event stream")
 		close(sp.halt)
 	})
 	return nil
