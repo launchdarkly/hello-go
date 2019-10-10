@@ -48,10 +48,28 @@
 			"revision": "1881a9bccb818787f68c52bfba648c6cf34c34fa"
 		},
 		{
-			"checksumSHA1": "jxoyoDwlFGpL01sy/zTq6zU0q3A=",
+			"checksumSHA1": "zHTcDhSGTNiGRV+UsAqg3Qa+s6I=",
 			"path": "gopkg.in/launchdarkly/go-server-sdk.v4",
-			"revision": "069c899ab8b132a9ed3e4725d4e64c4b71a1039f",
-			"revisionTime": "2019-09-12T21:50:06Z"
+			"revision": "345012a603adb10984591d745c80144b40d3905f",
+			"revisionTime": "2019-10-09T18:16:44Z"
+		},
+		{
+			"checksumSHA1": "xq6GK+DpfXrX0P2COZHp9f0ZqpI=",
+			"path": "gopkg.in/launchdarkly/go-server-sdk.v4/internal",
+			"revision": "345012a603adb10984591d745c80144b40d3905f",
+			"revisionTime": "2019-10-09T18:16:44Z"
+		},
+		{
+			"checksumSHA1": "TDoR85MAsLyuuLJ4IVkPIUZoEsk=",
+			"path": "gopkg.in/launchdarkly/go-server-sdk.v4/ldhttp",
+			"revision": "345012a603adb10984591d745c80144b40d3905f",
+			"revisionTime": "2019-10-09T18:16:44Z"
+		},
+		{
+			"checksumSHA1": "OIqfvJVF96I+IVtW/4OScxsfMl8=",
+			"path": "gopkg.in/launchdarkly/go-server-sdk.v4/ldlog",
+			"revision": "345012a603adb10984591d745c80144b40d3905f",
+			"revisionTime": "2019-10-09T18:16:44Z"
 		}
 	],
 	"rootPath": "github.com/launchdarkly/hello-go"
