@@ -13,6 +13,7 @@ jobs:
   build-run-linux:
     docker:
       - image: circleci/golang:1.14
+    working_directory: /go/src/github.com/launchdarkly/hello-go
     steps:
       - checkout
       - run:
