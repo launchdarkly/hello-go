@@ -12,7 +12,7 @@ import (
 // Set sdkKey to your LaunchDarkly SDK key before compiling
 const sdkKey = ""
 
-// Set featureFlagKEY to the feature flag key you want to evaluate
+// Set featureFlagKey to the feature flag key you want to evaluate
 const featureFlagKey = "my-boolean-flag"
 
 func main() {
