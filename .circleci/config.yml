@@ -13,7 +13,6 @@ jobs:
   build-run-linux:
     docker:
       - image: circleci/golang:1.14
-    working_directory: /go/src/github.com/launchdarkly/hello-go
     steps:
       - checkout
       - run:
@@ -21,7 +20,6 @@ jobs:
           command: |
             sed -i.bak "s/sdkKey *= *\".*\"/sdkKey = \"${LD_DEMO_SDK_KEY}\"/" main.go
             sed -i.bak "s/featureFlagKey *= *\".*\"/featureFlagKey = \"${LD_DEMO_FLAG_KEY}\"/" main.go
-      - run: go get ./...
       - run: go build
       - run:
           name: run demo

@@ -1,1 +1,5 @@
 hello-go
+
+# We do not check in go.sum for this demo because we want all of the dependencies to be
+# resolved to the latest versions when the repo is checked out and built.
+go.sum
