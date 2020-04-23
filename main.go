@@ -2,40 +2,53 @@ package main
 
 import (
 	"fmt"
+	"gopkg.in/launchdarkly/go-sdk-common.v1/ldvalue"
 	ld "gopkg.in/launchdarkly/go-server-sdk.v4"
+	"gopkg.in/launchdarkly/go-server-sdk.v4/ldlog"
+	"os"
 	"time"
 )
 
+// Set sdkKey to your LaunchDarkly SDK key before compiling
+const sdkKey = ""
+
+// Set featureFlagKey to the feature flag key you want to evaluate
+const featureFlagKey = "my-boolean-flag"
+
 func main() {
-	// TODO : Enter your LaunchDarkly SDK key here
-	client, err := ld.MakeClient("YOUR_SDK_KEY", 5*time.Second)
+	if sdkKey == "" {
+		fmt.Println("Please edit main.go to set sdkKey to your LaunchDarkly SDK key first")
+		os.Exit(1)
+	}
+
+	// The only custom configuration we are doing here is to reduce the amount of logging.
+	config := ld.DefaultConfig
+	config.Loggers.SetMinLevel(ldlog.Warn)
+
+	client, err := ld.MakeCustomClient(sdkKey, config, 5*time.Second)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 
-	key := "bob@example.com"
-	first := "Bob"
-	last := "Loblaw"
-	custom := map[string]interface{}{"groups": "beta_testers"}
+	// Set up the user properties. This user should appear on your LaunchDarkly users dashboard
+	// soon after you run the demo.
+	user := ld.NewUserBuilder("bob@example.com").
+		FirstName("Bob").
+		LastName("Loblaw").
+		Custom("groups", ldvalue.ArrayBuild().Add(ldvalue.String("beta_testers")).Build()).
+		Build()
 
-	user := ld.User{Key: &key,
-		FirstName: &first,
-		LastName:  &last,
-		Custom:    &custom,
-	}
-
-	// TODO : Enter the key for your feature flag here
-	show_feature, err := client.BoolVariation("YOUR_FEATURE_FLAG_KEY", user, false)
+	showFeature, err := client.BoolVariation(featureFlagKey, user, false)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 
-	if show_feature {
-		// application code to show the feature
-		fmt.Println("Showing your feature to " + *user.Key)
-	} else {
-		// the code to run if the feature is off
-		fmt.Println("Not showing your feature to " + *user.Key)
-	}
+	fmt.Printf("Feature flag '%s' is %t for this user\n", featureFlagKey, showFeature)
+
+	// Calling client.Close() ensures that the SDK shuts down cleanly before the program exits.
+	// Unless you do this, the SDK may not have a chance to deliver analytics events to LaunchDarkly,
+	// so the user properties and the flag usage statistics may not appear on your dashboard. In a
+	// normal long-running application, events would be delivered automatically in the background
+	// and you would not need to close the client.
 	client.Close()
 }
