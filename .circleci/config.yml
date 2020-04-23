@@ -1,0 +1,29 @@
+version: 2.1
+
+workflows:
+  test:
+    jobs:
+      - build-run-linux
+
+# This CI build ensures that the demo both compiles and works correctly. For the runtime test,
+# we use an SDK key and flag key that are passed in via the CircleCI project configuration;
+# the flag is configured to return a true value.
+
+jobs:
+  build-run-linux:
+    docker:
+      - image: circleci/golang:1.14
+    steps:
+      - checkout
+      - run:
+          name: insert SDK key and flag key into demo code
+          command: |
+            sed -i.bak "s/sdkKey *= *\".*\"/sdkKey = \"${LD_DEMO_SDK_KEY}\"/" hello.go
+            sed -i.bak "s/featureFlagKey *= *\".*\"/featureFlagKey = \"${LD_DEMO_FLAG_KEY}\"/" hello.go
+      - run: go get ./...
+      - run: go build
+      - run:
+          name: run demo
+          command: |
+            ./hello-go | tee output.txt
+            grep "is true for this user" output.txt || (echo "Flag did not evaluate to expected true value" && exit 1)
