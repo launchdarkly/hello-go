@@ -18,8 +18,8 @@ jobs:
       - run:
           name: insert SDK key and flag key into demo code
           command: |
-            sed -i.bak "s/sdkKey *= *\".*\"/sdkKey = \"${LD_DEMO_SDK_KEY}\"/" hello.go
-            sed -i.bak "s/featureFlagKey *= *\".*\"/featureFlagKey = \"${LD_DEMO_FLAG_KEY}\"/" hello.go
+            sed -i.bak "s/sdkKey *= *\".*\"/sdkKey = \"${LD_DEMO_SDK_KEY}\"/" main.go
+            sed -i.bak "s/featureFlagKey *= *\".*\"/featureFlagKey = \"${LD_DEMO_FLAG_KEY}\"/" main.go
       - run: go get ./...
       - run: go build
       - run:
