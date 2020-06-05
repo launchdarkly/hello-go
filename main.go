@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/launchdarkly/go-sdk-common.v1/ldvalue"
-	ld "gopkg.in/launchdarkly/go-server-sdk.v4"
-	"gopkg.in/launchdarkly/go-server-sdk.v4/ldlog"
+	"gopkg.in/launchdarkly/go-sdk-common.v2/ldlog"
+	"gopkg.in/launchdarkly/go-sdk-common.v2/lduser"
+	"gopkg.in/launchdarkly/go-sdk-common.v2/ldvalue"
+	ld "gopkg.in/launchdarkly/go-server-sdk.v5"
+	"gopkg.in/launchdarkly/go-server-sdk.v5/ldcomponents"
 	"os"
 	"time"
 )
@@ -22,8 +24,9 @@ func main() {
 	}
 
 	// The only custom configuration we are doing here is to reduce the amount of logging.
-	config := ld.DefaultConfig
-	config.Loggers.SetMinLevel(ldlog.Warn)
+	config := ld.Config{
+		Logging: ldcomponents.Logging().MinLevel(ldlog.Warn),
+	}
 
 	client, err := ld.MakeCustomClient(sdkKey, config, 5*time.Second)
 	if err != nil {
@@ -32,7 +35,7 @@ func main() {
 
 	// Set up the user properties. This user should appear on your LaunchDarkly users dashboard
 	// soon after you run the demo.
-	user := ld.NewUserBuilder("bob@example.com").
+	user := lduser.NewUserBuilder("bob@example.com").
 		FirstName("Bob").
 		LastName("Loblaw").
 		Custom("groups", ldvalue.ArrayBuild().Add(ldvalue.String("beta_testers")).Build()).
