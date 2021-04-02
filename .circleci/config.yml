@@ -30,7 +30,10 @@ jobs:
       - run:
           name: verify that SDK dependencies have not been pinned
           command: |
-            grep 'gopkg.in/launchdarkly/[^ ]* v' go.mod && (echo "Undesirable specific version dependency! See go.mod for explanation."; exit 1)
+            if grep 'gopkg.in/launchdarkly/[^ ]* v' go.mod; then
+              echo "Undesirable specific version dependency! See go.mod for explanation."
+              exit 1
+            fi
       - run:
           name: insert SDK key and flag key into demo code
           command: |
