@@ -2,56 +2,52 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/launchdarkly/go-sdk-common.v2/ldlog"
-	"gopkg.in/launchdarkly/go-sdk-common.v2/lduser"
-	"gopkg.in/launchdarkly/go-sdk-common.v2/ldvalue"
-	ld "gopkg.in/launchdarkly/go-server-sdk.v5"
-	"gopkg.in/launchdarkly/go-server-sdk.v5/ldcomponents"
 	"os"
 	"time"
+
+	"gopkg.in/launchdarkly/go-sdk-common.v2/lduser"
+	ld "gopkg.in/launchdarkly/go-server-sdk.v5"
 )
 
-// Set sdkKey to your LaunchDarkly SDK key before compiling
+// Set sdkKey to your LaunchDarkly SDK key.
 const sdkKey = ""
 
-// Set featureFlagKey to the feature flag key you want to evaluate
+// Set featureFlagKey to the feature flag key you want to evaluate.
 const featureFlagKey = "my-boolean-flag"
+
+func showMessage(s string) { fmt.Printf("*** %s\n\n", s) }
 
 func main() {
 	if sdkKey == "" {
-		fmt.Println("Please edit main.go to set sdkKey to your LaunchDarkly SDK key first")
+		showMessage("Please edit main.go to set sdkKey to your LaunchDarkly SDK key first")
 		os.Exit(1)
 	}
 
-	// The only custom configuration we are doing here is to reduce the amount of logging.
-	config := ld.Config{
-		Logging: ldcomponents.Logging().MinLevel(ldlog.Warn),
-	}
-
-	client, err := ld.MakeCustomClient(sdkKey, config, 5*time.Second)
-	if err != nil {
-		fmt.Println(err.Error())
+	ldClient, _ := ld.MakeClient(sdkKey, 5*time.Second)
+	if ldClient.Initialized() {
+		showMessage("SDK successfully initialized!")
+	} else {
+		showMessage("SDK failed to initialize")
+		os.Exit(1)
 	}
 
 	// Set up the user properties. This user should appear on your LaunchDarkly users dashboard
 	// soon after you run the demo.
-	user := lduser.NewUserBuilder("bob@example.com").
-		FirstName("Bob").
-		LastName("Loblaw").
-		Custom("groups", ldvalue.ArrayBuild().Add(ldvalue.String("beta_testers")).Build()).
+	user := lduser.NewUserBuilder("example-user-key").
+		Name("Sandy").
 		Build()
 
-	showFeature, err := client.BoolVariation(featureFlagKey, user, false)
+	flagValue, err := ldClient.BoolVariation(featureFlagKey, user, false)
 	if err != nil {
-		fmt.Println(err.Error())
+		showMessage("error: " + err.Error())
 	}
 
-	fmt.Printf("Feature flag '%s' is %t for this user\n", featureFlagKey, showFeature)
+	showMessage(fmt.Sprintf("Feature flag '%s' is %t for this user", featureFlagKey, flagValue))
 
-	// Calling client.Close() ensures that the SDK shuts down cleanly before the program exits.
-	// Unless you do this, the SDK may not have a chance to deliver analytics events to LaunchDarkly,
-	// so the user properties and the flag usage statistics may not appear on your dashboard. In a
-	// normal long-running application, events would be delivered automatically in the background
-	// and you would not need to close the client.
-	client.Close()
+	// Here we ensure that the SDK shuts down cleanly and has a chance to deliver analytics
+	// events to LaunchDarkly before the program exits. If analytics events are not delivered,
+	// the user properties and flag usage statistics will not appear on your dashboard. In a
+	// normal long-running application, the SDK would continue running and events would be
+	// delivered automatically in the background.
+	ldClient.Close()
 }
