@@ -10,7 +10,7 @@ import (
 )
 
 // Set sdkKey to your LaunchDarkly SDK key.
-const sdkKey = "sdk-7e6ee830-cbc9-4797-a77c-7bd2d36d730f"
+const sdkKey = ""
 
 // Set featureFlagKey to the feature flag key you want to evaluate.
 const featureFlagKey = "my-boolean-flag"
