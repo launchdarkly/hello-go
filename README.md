@@ -19,3 +19,5 @@ const featureFlagKey = "my-flag"
 2. On the command line, run `go build`
 
 3. Run `./hello-go`
+
+You should see the message `"Feature flag '<flag key>' is <true/false> for this user"`.
