@@ -30,7 +30,7 @@ jobs:
       - run:
           name: verify that SDK dependencies have not been pinned
           command: |
-            if grep 'github.com/launchdarkly/[^ ]* v' go.mod; then
+            if grep 'github.com/launchdarkly/(go-sdk-common|go-server-sdk)/[^ ]* v' go.mod; then
               echo "Undesirable specific version dependency! See go.mod for explanation."
               exit 1
             fi
