@@ -24,13 +24,13 @@ workflows:
 jobs:
   build-run-linux:
     docker:
-      - image: cimg/go:1.14
+      - image: cimg/go:1.18
     steps:
       - checkout
       - run:
           name: verify that SDK dependencies have not been pinned
           command: |
-            if grep 'gopkg.in/launchdarkly/[^ ]* v' go.mod; then
+            if grep 'github.com/launchdarkly/(go-sdk-common|go-server-sdk)/[^ ]* v' go.mod; then
               echo "Undesirable specific version dependency! See go.mod for explanation."
               exit 1
             fi
@@ -39,9 +39,9 @@ jobs:
           command: |
             sed -i.bak "s/sdkKey *= *\".*\"/sdkKey = \"${LD_HELLO_WORLD_SDK_KEY}\"/" main.go
             sed -i.bak "s/featureFlagKey *= *\".*\"/featureFlagKey = \"${LD_HELLO_WORLD_FLAG_KEY_WITH_TRUE_VALUE}\"/" main.go
-      - run: go build
+      - run: go mod tidy && go build
       - run:
           name: run demo
           command: |
             ./hello-go | tee output.txt
-            grep "is true for this user" output.txt || (echo "Flag did not evaluate to expected true value" && exit 1)
+            grep "is true for this context" output.txt || (echo "Flag did not evaluate to expected true value" && exit 1)
