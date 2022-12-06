@@ -24,13 +24,13 @@ workflows:
 jobs:
   build-run-linux:
     docker:
-      - image: cimg/go:1.14
+      - image: cimg/go:1.18
     steps:
       - checkout
       - run:
           name: verify that SDK dependencies have not been pinned
           command: |
-            if grep 'gopkg.in/launchdarkly/[^ ]* v' go.mod; then
+            if grep 'github.com/launchdarkly/[^ ]* v' go.mod; then
               echo "Undesirable specific version dependency! See go.mod for explanation."
               exit 1
             fi
@@ -44,4 +44,4 @@ jobs:
           name: run demo
           command: |
             ./hello-go | tee output.txt
-            grep "is true for this user" output.txt || (echo "Flag did not evaluate to expected true value" && exit 1)
+            grep "is true for this context" output.txt || (echo "Flag did not evaluate to expected true value" && exit 1)

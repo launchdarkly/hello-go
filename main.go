@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"gopkg.in/launchdarkly/go-sdk-common.v2/lduser"
-	ld "gopkg.in/launchdarkly/go-server-sdk.v5"
+	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	ld "github.com/launchdarkly/go-server-sdk/v6"
 )
 
 // Set sdkKey to your LaunchDarkly SDK key.
@@ -31,23 +31,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set up the user properties. This user should appear on your LaunchDarkly users dashboard
+	// Set up the evaluation context. This context should appear on your LaunchDarkly contexts dashboard
 	// soon after you run the demo.
-	user := lduser.NewUserBuilder("example-user-key").
+	context := ldcontext.NewBuilder("example-user-key").
 		Name("Sandy").
 		Build()
 
-	flagValue, err := ldClient.BoolVariation(featureFlagKey, user, false)
+	flagValue, err := ldClient.BoolVariation(featureFlagKey, context, false)
 	if err != nil {
 		showMessage("error: " + err.Error())
 	}
 
-	showMessage(fmt.Sprintf("Feature flag '%s' is %t for this user", featureFlagKey, flagValue))
+	showMessage(fmt.Sprintf("Feature flag '%s' is %t for this context", featureFlagKey, flagValue))
 
 	// Here we ensure that the SDK shuts down cleanly and has a chance to deliver analytics
 	// events to LaunchDarkly before the program exits. If analytics events are not delivered,
-	// the user properties and flag usage statistics will not appear on your dashboard. In a
-	// normal long-running application, the SDK would continue running and events would be
+	// the context attributes and flag usage statistics will not appear on your dashboard. In
+	// a normal long-running application, the SDK would continue running and events would be
 	// delivered automatically in the background.
 	ldClient.Close()
 }
