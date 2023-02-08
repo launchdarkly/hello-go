@@ -17,11 +17,12 @@ go 1.18
 // gopkg.in/launchdarkly/go-server-sdk.v5 back to "latest" and commit the change.
 
 require (
-	github.com/launchdarkly/go-sdk-common/v3 latest
-	github.com/launchdarkly/go-server-sdk/v6 latest
+	github.com/launchdarkly/go-sdk-common/v3 v3.0.0
+	github.com/launchdarkly/go-server-sdk/v6 v6.0.0
 )
 
 require (
+	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20171119193500-2bcd89a1743f // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -35,4 +36,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	golang.org/x/exp v0.0.0-20220823124025-807a23277127 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
+	gopkg.in/ghodss/yaml.v1 v1.0.0 // indirect
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 )
