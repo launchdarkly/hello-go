@@ -15,8 +15,8 @@ toolchain go1.22.1
 // Do not check in changes to this file with these packages pinned to a specific
 // version. If you do that, the CI build will detect it and raise an error:
 // "Undesirable specific version dependency!" You should then edit the file to
-// set the versions of gopkg.in/launchdarkly/go-sdk-common.v2 and
-// gopkg.in/launchdarkly/go-server-sdk.v5 back to "latest" and commit the change.
+// set the versions of github.com/launchdarkly/go-sdk-common/v3 and
+// github.com/launchdarkly/go-server-sdk/v7 back to "latest" and commit the change.
 
 require (
 	github.com/launchdarkly/go-sdk-common/v3 latest

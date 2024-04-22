@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
@@ -22,6 +21,8 @@ func showBanner() {
 		"          ██     \n" +
 		"        ██       \n")
 }
+
+func showMessage(s string) { fmt.Printf("*** %s\n\n", s) }
 
 func main() {
 	// Set sdkKey to your LaunchDarkly SDK key.
@@ -47,7 +48,7 @@ func main() {
 		Build()
 
 	// Set featureFlagKey to the feature flag key you want to evaluate.
-	var featureFlagKey = "sample-feature"
+	var featureFlagKey = "my-boolean-flag"
 
 	if os.Getenv("LAUNCHDARKLY_FLAG_KEY") != "" {
 		featureFlagKey = os.Getenv("LAUNCHDARKLY_FLAG_KEY")
@@ -65,13 +66,11 @@ func main() {
 	}
 
 	updateCh := ldClient.GetFlagTracker().AddFlagValueChangeListener(featureFlagKey, context, ldvalue.Null())
-	go func() {
-		for event := range updateCh {
-			fmt.Sprintf("The '%s' feature flag evaluates to %t.", featureFlagKey, event.NewValue)
-		}
-	}()
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	wg.Wait()
+	for event := range updateCh {
+		showMessage(fmt.Sprintf("The '%s' feature flag evaluates to %t.", featureFlagKey, event.NewValue.BoolValue()))
+		if event.NewValue.BoolValue() {
+			showBanner()
+		}
+	}
 }
