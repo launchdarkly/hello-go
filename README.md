@@ -14,7 +14,7 @@ This demo requires Go 1.18 or higher.
     export LAUNCHDARKLY_FLAG_KEY="my-boolean-flag"
     ```
 
-2. On the command line, run `go build`
+2. On the command line, run `go build`. Follow the instruction to run `go mod tidy` if `go build` said updates to go.mod is needed.
 
 3. Run `./hello-go`
 
