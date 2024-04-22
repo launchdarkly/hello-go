@@ -48,7 +48,7 @@ func main() {
 		Build()
 
 	// Set featureFlagKey to the feature flag key you want to evaluate.
-	var featureFlagKey = "my-boolean-flag"
+	var featureFlagKey = "sample-feature"
 
 	if os.Getenv("LAUNCHDARKLY_FLAG_KEY") != "" {
 		featureFlagKey = os.Getenv("LAUNCHDARKLY_FLAG_KEY")
