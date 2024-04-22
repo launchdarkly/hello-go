@@ -2,8 +2,6 @@ module github.com/launchdarkly/hello-go
 
 go 1.21
 
-toolchain go1.22.1
-
 // READ THIS!
 //
 // This file has been deliberately checked in with "latest" instead of a specific
