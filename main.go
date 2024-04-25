@@ -25,11 +25,10 @@ func showBanner() {
 func showMessage(s string) { fmt.Printf("*** %s\n\n", s) }
 
 func main() {
-	// Set sdkKey to your LaunchDarkly SDK key.
-	var sdkKey = os.Getenv("LAUNCHDARKLY_SERVER_KEY")
+	var sdkKey = os.Getenv("LAUNCHDARKLY_SDK_KEY")
 
 	if sdkKey == "" {
-		showMessage("Please edit main.go to set sdkKey to your LaunchDarkly SDK key first")
+		showMessage("LaunchDarkly SDK key is required: set the LAUNCHDARKLY_SDK_KEY environment variable and try again.")
 		os.Exit(1)
 	}
 
