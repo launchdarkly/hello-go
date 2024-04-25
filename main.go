@@ -65,6 +65,10 @@ func main() {
 		showBanner()
 	}
 
+	if os.Getenv("CI") != "" {
+		os.Exit(0)
+	}
+
 	updateCh := ldClient.GetFlagTracker().AddFlagValueChangeListener(featureFlagKey, context, ldvalue.Null())
 
 	for event := range updateCh {
