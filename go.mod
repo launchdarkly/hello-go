@@ -1,6 +1,6 @@
 module github.com/launchdarkly/hello-go
 
-go 1.18
+go 1.21
 
 // READ THIS!
 //
@@ -13,8 +13,8 @@ go 1.18
 // Do not check in changes to this file with these packages pinned to a specific
 // version. If you do that, the CI build will detect it and raise an error:
 // "Undesirable specific version dependency!" You should then edit the file to
-// set the versions of gopkg.in/launchdarkly/go-sdk-common.v2 and
-// gopkg.in/launchdarkly/go-server-sdk.v5 back to "latest" and commit the change.
+// set the versions of github.com/launchdarkly/go-sdk-common/v3 and
+// github.com/launchdarkly/go-server-sdk/v7 back to "latest" and commit the change.
 
 require (
 	github.com/launchdarkly/go-sdk-common/v3 latest
@@ -28,7 +28,7 @@ require (
 	github.com/launchdarkly/ccache v1.1.0 // indirect
 	github.com/launchdarkly/eventsource v1.6.2 // indirect
 	github.com/launchdarkly/go-jsonstream/v3 v3.0.0 // indirect
-	github.com/launchdarkly/go-sdk-events/v3 v3.0.0 // indirect
+	github.com/launchdarkly/go-sdk-events/v3 v3.2.0 // indirect
 	github.com/launchdarkly/go-semver v1.0.2 // indirect
 	github.com/launchdarkly/go-server-sdk-evaluation/v3 v3.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
