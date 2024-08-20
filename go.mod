@@ -17,8 +17,8 @@ go 1.21
 // github.com/launchdarkly/go-server-sdk/v7 back to "latest" and commit the change.
 
 require (
-	github.com/launchdarkly/go-sdk-common/v3 v3.1.0
-	github.com/launchdarkly/go-server-sdk/v7 v7.6.0
+	github.com/launchdarkly/go-sdk-common/v3 latest
+	github.com/launchdarkly/go-server-sdk/v7 latest
 )
 
 require (
@@ -28,7 +28,7 @@ require (
 	github.com/launchdarkly/ccache v1.1.0 // indirect
 	github.com/launchdarkly/eventsource v1.6.2 // indirect
 	github.com/launchdarkly/go-jsonstream/v3 v3.0.0 // indirect
-	github.com/launchdarkly/go-sdk-events/v3 v3.4.0 // indirect
+	github.com/launchdarkly/go-sdk-events/v3 v3.2.0 // indirect
 	github.com/launchdarkly/go-semver v1.0.2 // indirect
 	github.com/launchdarkly/go-server-sdk-evaluation/v3 v3.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
