@@ -1,10 +1,11 @@
 module github.com/launchdarkly/hello-go
 
-go 1.21
+go 1.23.0
+
 toolchain go1.24.1
 
 require (
-	github.com/launchdarkly/go-sdk-common/v3 v3.2.0
+	github.com/launchdarkly/go-sdk-common/v3 v3.3.0
 	github.com/launchdarkly/go-server-sdk/v7 v7.10.1
 )
 
