@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/launchdarkly/go-sdk-common/v3 v3.5.0
-	github.com/launchdarkly/go-server-sdk/v7 v7.14.7
+	github.com/launchdarkly/go-server-sdk/v7 v7.15.0
 )
 
 require (
