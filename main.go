@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/launchdarkly/go-sdk-common/v4/ldcontext"
-	"github.com/launchdarkly/go-sdk-common/v4/ldvalue"
+	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 	ld "github.com/launchdarkly/go-server-sdk/v7"
 )
 
