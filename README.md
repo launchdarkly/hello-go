@@ -5,7 +5,7 @@ We've built a simple console application that demonstrates how the LaunchDarkly 
 Below, you'll find the basic build procedure. For more comprehensive instructions, you can visit your 
 [Quickstart page](https://app.launchdarkly.com/quickstart#/) or the [Go SDK reference guide](https://docs.launchdarkly.com/sdk/server-side/go).
 
-This demo requires Go 1.24 or higher.
+This demo requires Go 1.25 or higher.
 
 ## Build instructions
 
