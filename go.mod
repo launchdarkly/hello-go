@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/launchdarkly/go-sdk-common/v3 v3.6.0
-	github.com/launchdarkly/go-server-sdk/v7 v7.19.2
+	github.com/launchdarkly/go-server-sdk/v7 v7.20.0
 )
 
 require (
