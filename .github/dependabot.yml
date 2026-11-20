@@ -1,14 +1,5 @@
 version: 2
 updates:
-  - package-ecosystem: 'github-actions'
-    directory: '/'
-    schedule:
-      interval: 'monthly'
-    cooldown:
-      default-days: 7
-      exclude:
-        - 'launchdarkly/*'
-
   - package-ecosystem: 'gomod'
     directory: '/'
     schedule:
@@ -17,3 +8,12 @@ updates:
       default-days: 7
       exclude:
         - 'github.com/launchdarkly/*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    cooldown:
+      default-days: 7
+      exclude:
+        - 'launchdarkly/*'
